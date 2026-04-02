@@ -47,6 +47,7 @@ import os
 import shutil
 from pathlib import Path
  
+import torch
 import numpy as np
 import ale_py
 import gymnasium as gym
@@ -80,154 +81,38 @@ class VentureRewardWrapper(gym.Wrapper):
       reward hacking / local optimum caused by sparse signals.
  
     Shaping strategy:
-      1. NEW ROOM BONUS (+5.0): reward the agent every time it enters a room
-         it has never visited before. Encourages exploration of the dungeon map.
-      2. TREASURE BONUS (2x multiplier): amplify the original game reward for
+      1. TREASURE BONUS (2x multiplier): amplify the original game reward for
          collecting a treasure. Makes collecting worth the risk of entering.
-      3. DEATH PENALTY (-2.0): small penalty on life loss to discourage passive
+      2. DEATH PENALTY (-2.0): small penalty on life loss to discourage passive
          survival loops (the agent already gets terminal_on_life_loss, this
          reinforces the signal).
-      4. REVISIT DECAY: after visiting a room 3+ times without collecting a
-         treasure, give a small negative nudge (-0.5) to push it to move on.
- 
-    Room detection:
-      Venture's RAM exposes the current room index at byte 0x83 (decimal 131).
-      We read it via the ALE RAM interface each step — this is zero-overhead
-      and does not modify the visual observation the CNN sees.
- 
+
     Note on reward clipping:
-      Standard Atari preprocessing clips rewards to {-1, 0, +1}. We apply
-      shaping BEFORE the AtariWrapper clip so all bonuses are visible to the
-      agent. When clip_reward=True the wrapper will see our shaped reward and
-      clip it, which is intentional — the sign of the shaping still guides
-      learning even after clipping.
+      Standard Atari preprocessing clips rewards to {-1, 0, +1}. We keep the
+      shaped reward outside that clipping so the model can still see the reward
+      magnitude for rare positive events.
     """
  
-    NEW_ROOM_BONUS       =  5.0
-    TREASURE_MULT        =  2.0   # multiply original game reward (treasures give 50–250 pts)
-    ENEMY_KILL_BONUS     =  2.0   # bonus per enemy killed (detected via positive reward)
-    DEATH_PENALTY        = -2.0
-    IDLE_PENALTY         = -0.1   # penalty per frame for not moving
-    WALL_COLLISION_PENALTY = -0.5 # penalty for hitting a wall
-    REVISIT_NUDGE        = -1.5
-    REVISIT_THRESHOLD    =  2     # how many visits before nudge kicks in
-    STAGNATION_POWER     =  2.0   # exponent for time-in-room penalty: penalty ∝ steps^2
-    STAGNATION_SCALE     = 200.0  # divisor to scale penalty: -steps^2 / SCALE (lower = more aggressive)
+    TREASURE_MULT        =  2.0
+    DEATH_PENALTY        = -5.0
 
     def __init__(self, env: gym.Env) -> None:
         super().__init__(env)
-        self._visited_rooms: set[int] = set()
-        self._room_visit_count: dict[int, int] = {}
         self._prev_lives: int | None = None
-        self._current_room: int | None = None
-        self._steps_since_last_reward: int = 0
-        self._steps_in_current_room: int = 0  # counter resets on room change or kill
-        self._prev_player_pos: tuple[int, int] | None = None  # track (x, y) for idle detection
-        self._pre_action_pos: tuple[int, int] | None = None  # position before action for collision detection
-
-    def _get_room(self) -> int:
-        """Detecta la sala usando bytes 0x60 (columna) y 0x61 (fila) del mapa."""
-        try:
-            ram = self.env.unwrapped.ale.getRAM()
-            col = int(ram[0x60])
-            row = int(ram[0x61])
-            # (0,0) aparece brevemente en transiciones — ignorar
-            if col == 0 and row == 0:
-                return self._current_room if self._current_room is not None else -1
-            return col * 256 + row
-        except Exception:
-            return 0
-
-    def _get_player_pos(self) -> tuple[int, int]:
-        """Get player (x, y) position from RAM for idle detection and collision."""
-        try:
-            ram = self.env.unwrapped.ale.getRAM()
-            # Player X position: byte 0x80, Y position: byte 0x82
-            player_x = int(ram[0x80])
-            player_y = int(ram[0x82])
-            return (player_x, player_y)
-        except Exception:
-            return (0, 0)
-
-    def _detect_wall_collision(self, prev_pos: tuple[int, int], curr_pos: tuple[int, int], action: int) -> bool:
-        """Detect if player tried to move (non-zero action) but position didn't change (wall collision)."""
-        # Action 0 = NOOP (no movement), so if action != 0 and pos didn't change → wall collision
-        return action != 0 and prev_pos == curr_pos
 
     def reset(self, **kwargs):
-        self._visited_rooms.clear()
-        self._room_visit_count.clear()
         self._prev_lives = None
-        self._current_room = None
-        self._steps_since_last_reward = 0
-        self._steps_in_current_room = 0
-        self._prev_player_pos = None
-        self._pre_action_pos = None
         obs, info = self.env.reset(**kwargs)
-        self._current_room = self._get_room()
-        self._visited_rooms.add(self._current_room)
-        self._room_visit_count[self._current_room] = 1
         self._prev_lives = info.get("lives", 3)
-        self._prev_player_pos = self._get_player_pos()
-        self._pre_action_pos = self._prev_player_pos
         return obs, info
  
     def step(self, action):
-        # Store position BEFORE action for collision detection
-        self._pre_action_pos = self._get_player_pos()
-        
         obs, reward, terminated, truncated, info = self.env.step(action)
         shaped_reward = float(reward)
 
-        # Reward shaping for kills and treasures.
-        # Any positive reward in Venture = enemy killed or treasure collected.
         if reward > 0:
-            # Amplify positive rewards (kills and treasures).
             shaped_reward = reward * self.TREASURE_MULT
-            # Reset stagnation timers when agent gets a kill or treasure.
-            self._steps_since_last_reward = 0
-            self._steps_in_current_room = 0  # Reset room timer to allow multi-kill bursts
-        else:
-            # No positive reward this step → increment stagnation counters.
-            self._steps_since_last_reward += 1
-            if self._steps_since_last_reward > 50:
-                shaped_reward -= 0.2
-
-        # Exponential time-in-room penalty: discourage lingering without killing.
-        # More aggressive: starts at step 10, SCALE=200 instead of 1000.
-        # After 50 steps: -12.5, After 100 steps: -50 penalty per step.
-        self._steps_in_current_room += 1
-        if self._steps_in_current_room > 10:  # Grace period: no penalty for first 10 steps
-            stagnation_penalty = -((self._steps_in_current_room ** self.STAGNATION_POWER) / self.STAGNATION_SCALE)
-            shaped_reward += stagnation_penalty
-
-        # Idle detection: penalize if player position hasn't changed.
-        current_player_pos = self._get_player_pos()
-        if self._prev_player_pos is not None and current_player_pos == self._prev_player_pos:
-            shaped_reward += self.IDLE_PENALTY
-        self._prev_player_pos = current_player_pos
-
-        # Wall collision detection: penalize if player tried to move but hit a wall.
-        if self._pre_action_pos is not None and self._detect_wall_collision(self._pre_action_pos, current_player_pos, action):
-            shaped_reward += self.WALL_COLLISION_PENALTY
-
-        # Detect room change and reset in-room timer.
-        new_room = self._get_room()
-        if new_room != self._current_room:
-            self._current_room = new_room
-            self._steps_in_current_room = 0  # Fresh start in new room
-            if new_room not in self._visited_rooms:
-                # Never-before-seen room → big bonus
-                shaped_reward += self.NEW_ROOM_BONUS
-                self._visited_rooms.add(new_room)
-                self._room_visit_count[new_room] = 1
-            else:
-                # Revisited room → increment counter, nudge if excessive
-                self._room_visit_count[new_room] = self._room_visit_count.get(new_room, 0) + 1
-                if self._room_visit_count[new_room] >= self.REVISIT_THRESHOLD:
-                    shaped_reward += self.REVISIT_NUDGE
  
-        # Death penalty
         current_lives = info.get("lives", self._prev_lives)
         if self._prev_lives is not None and current_lives < self._prev_lives:
             shaped_reward += self.DEATH_PENALTY
@@ -391,11 +276,11 @@ def train_agent(
             learning_rate=5e-5,
             buffer_size=200_000,
             learning_starts=25_000,
-            batch_size=64,
+            batch_size=32,
             gamma=0.99,
-            train_freq=1,
+            train_freq=4,
             target_update_interval=2_000,
-            exploration_fraction=0.40,
+            exploration_fraction=0.5,
             exploration_final_eps=0.01,
             reward_shaping=True,
             timesteps=timesteps,
@@ -645,6 +530,9 @@ def parse_args() -> argparse.Namespace:
  
  
 def main():
+    print("GPU Available NVIDIA SI:", torch.cuda.is_available())
+    print("GPU Name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU")
+    print("CUDA Version:", torch.version.cuda)
     args = parse_args()
  
     if args.mode == "train":
