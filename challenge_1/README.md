@@ -128,3 +128,7 @@ When running train mode without --experiment, the script uses these defaults:
 
 - The script prints GPU and CUDA availability at startup.
 - On RAM-limited systems, keep optimize_memory_usage=True to reduce replay buffer memory footprint.
+
+### VIDEO
+
+[Group 6 / Challenge 1 Video](https://drive.google.com/drive/folders/1nqwb9-S4W8uKuwVLx-iSxD-YRPQ_60Bs?usp=drive_link).
