@@ -618,7 +618,7 @@ def parse_args() -> argparse.Namespace:
  
  
 def main():
-    print("GPU Available NVIDIA SI:", torch.cuda.is_available())
+    print("GPU Available NVIDIA:", torch.cuda.is_available())
     print("GPU Name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU")
     print("CUDA Version:", torch.version.cuda)
     args = parse_args()
