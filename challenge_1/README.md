@@ -146,3 +146,10 @@ When running train mode without --experiment, the script uses these defaults:
 ## VIDEO
 
 [Group 6 / Challenge 1 Video](https://drive.google.com/drive/folders/1nqwb9-S4W8uKuwVLx-iSxD-YRPQ_60Bs?usp=drive_link).
+
+- 0:00 - 1:01 Introducion and about Venture
+- 1:01 - 2:23 Deep Q-Network
+- 2:23 - 3:01 Why is hard?
+- 3:01 - 10:55 Code explanation
+- 10:55 - 12:35 Results and hparams selection
+- 12:35 - 14:14 Tensorboard and conclusions
