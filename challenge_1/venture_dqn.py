@@ -45,26 +45,28 @@ import argparse
 import json
 import os
 import shutil
+import zlib
 from pathlib import Path
  
+import torch
 import numpy as np
 import ale_py
 import gymnasium as gym
  
-gym.register_envs(ale_py) 
+gym.register_envs(ale_py)  # register ALE environments in the gymnasium namespace
  
 from torch.utils.tensorboard import SummaryWriter
  
 from stable_baselines3 import DQN
 from stable_baselines3.common.atari_wrappers import AtariWrapper
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.env_util import make_atari_env
 from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
  
-
+# Group 6 environment
 ENV_ID = "ALE/Venture-v5"
  
-
+# Number of consecutive frames stacked together as a single observation.
+# Critical for Venture: monsters move fast and the agent needs motion context.
 N_STACK = 4
  
  
@@ -79,151 +81,54 @@ class VentureRewardWrapper(gym.Wrapper):
       reward hacking / local optimum caused by sparse signals.
  
     Shaping strategy:
-      1. NEW ROOM BONUS (+5.0): reward the agent every time it enters a room
-         it has never visited before. Encourages exploration of the dungeon map.
-      2. TREASURE BONUS (2x multiplier): amplify the original game reward for
-         collecting a treasure. Makes collecting worth the risk of entering.
-      3. DEATH PENALTY (-2.0): small penalty on life loss to discourage passive
-         survival loops (the agent already gets terminal_on_life_loss, this
-         reinforces the signal).
-      4. REVISIT DECAY: after visiting a room 3+ times without collecting a
-         treasure, give a small negative nudge (-0.5) to push it to move on.
- 
-    Room detection:
-      Venture's RAM exposes the current room index at byte 0x83 (decimal 131).
-      We read it via the ALE RAM interface each step — this is zero-overhead
-      and does not modify the visual observation the CNN sees.
- 
+      1. TREASURE BONUS (1.35x): preserve positive signal without over-amplifying
+         easy farming loops.
+      2. DEATH PENALTY (-1.5): direct signal against reckless actions.
+      3. STEP COST (-0.001): very small living cost to discourage wall-hugging
+         and idle loops.
+      4. NOVELTY BONUS: count-based bonus on visually new states to promote
+         exploration into unseen rooms.
+
     Note on reward clipping:
-      Standard Atari preprocessing clips rewards to {-1, 0, +1}. We apply
-      shaping BEFORE the AtariWrapper clip so all bonuses are visible to the
-      agent. When clip_reward=True the wrapper will see our shaped reward and
-      clip it, which is intentional — the sign of the shaping still guides
-      learning even after clipping.
+      Standard Atari preprocessing clips rewards to {-1, 0, +1}. We keep the
+      shaped reward outside that clipping so the model can still see the reward
+      magnitude for rare positive events.
     """
  
-    NEW_ROOM_BONUS       =  5.0
-    TREASURE_MULT        =  2.0   
-    ENEMY_KILL_BONUS     =  2.0  
-    DEATH_PENALTY        = -2.0
-    IDLE_PENALTY         = -0.1   
-    WALL_COLLISION_PENALTY = -0.5 
-    REVISIT_NUDGE        = -1.5
-    REVISIT_THRESHOLD    =  2    
-    STAGNATION_POWER     =  2.0  
-    STAGNATION_SCALE     = 200.0  
+    TREASURE_MULT        =  1.35
+    DEATH_PENALTY        = -1.5
+    STEP_COST            = -0.001
+    NOVELTY_BONUS_COEF   =  0.01
 
     def __init__(self, env: gym.Env) -> None:
         super().__init__(env)
-        self._visited_rooms: set[int] = set()
-        self._room_visit_count: dict[int, int] = {}
         self._prev_lives: int | None = None
-        self._current_room: int | None = None
-        self._steps_since_last_reward: int = 0
-        self._steps_in_current_room: int = 0 
-        self._prev_player_pos: tuple[int, int] | None = None  
-        self._pre_action_pos: tuple[int, int] | None = None  
+        self._state_counts: dict[int, int] = {}
 
-    def _get_room(self) -> int:
-        """Detecta la sala usando bytes 0x60 (columna) y 0x61 (fila) del mapa."""
-        try:
-            ram = self.env.unwrapped.ale.getRAM()
-            col = int(ram[0x60])
-            row = int(ram[0x61])
-            
-            if col == 0 and row == 0:
-                return self._current_room if self._current_room is not None else -1
-            return col * 256 + row
-        except Exception:
-            return 0
-
-    def _get_player_pos(self) -> tuple[int, int]:
-        """Get player (x, y) position from RAM for idle detection and collision."""
-        try:
-            ram = self.env.unwrapped.ale.getRAM()
-        
-            player_x = int(ram[0x80])
-            player_y = int(ram[0x82])
-            return (player_x, player_y)
-        except Exception:
-            return (0, 0)
-
-    def _detect_wall_collision(self, prev_pos: tuple[int, int], curr_pos: tuple[int, int], action: int) -> bool:
-        """Detect if player tried to move (non-zero action) but position didn't change (wall collision)."""
-       
-        return action != 0 and prev_pos == curr_pos
+    def _state_key(self, obs: np.ndarray) -> int:
+        # Fast visual hash from a downsampled luma channel.
+        frame = obs[..., 0] if obs.ndim == 3 else obs
+        downsampled = frame[::12, ::12]
+        return zlib.adler32(downsampled.tobytes())
 
     def reset(self, **kwargs):
-        self._visited_rooms.clear()
-        self._room_visit_count.clear()
         self._prev_lives = None
-        self._current_room = None
-        self._steps_since_last_reward = 0
-        self._steps_in_current_room = 0
-        self._prev_player_pos = None
-        self._pre_action_pos = None
         obs, info = self.env.reset(**kwargs)
-        self._current_room = self._get_room()
-        self._visited_rooms.add(self._current_room)
-        self._room_visit_count[self._current_room] = 1
         self._prev_lives = info.get("lives", 3)
-        self._prev_player_pos = self._get_player_pos()
-        self._pre_action_pos = self._prev_player_pos
         return obs, info
  
     def step(self, action):
-
-        self._pre_action_pos = self._get_player_pos()
-        
         obs, reward, terminated, truncated, info = self.env.step(action)
-        shaped_reward = float(reward)
+        shaped_reward = float(reward) + self.STEP_COST
 
-      
         if reward > 0:
-            
-            shaped_reward = reward * self.TREASURE_MULT
-           
-            self._steps_since_last_reward = 0
-            self._steps_in_current_room = 0 
-        else:
-            # No positive reward this step → increment stagnation counters.
-            self._steps_since_last_reward += 1
-            if self._steps_since_last_reward > 50:
-                shaped_reward -= 0.2
+            shaped_reward = reward * self.TREASURE_MULT + self.STEP_COST
 
-        
-        self._steps_in_current_room += 1
-        if self._steps_in_current_room > 10:  
-            stagnation_penalty = -((self._steps_in_current_room ** self.STAGNATION_POWER) / self.STAGNATION_SCALE)
-            shaped_reward += stagnation_penalty
-
-       
-        current_player_pos = self._get_player_pos()
-        if self._prev_player_pos is not None and current_player_pos == self._prev_player_pos:
-            shaped_reward += self.IDLE_PENALTY
-        self._prev_player_pos = current_player_pos
-
-       
-        if self._pre_action_pos is not None and self._detect_wall_collision(self._pre_action_pos, current_player_pos, action):
-            shaped_reward += self.WALL_COLLISION_PENALTY
-
-        
-        new_room = self._get_room()
-        if new_room != self._current_room:
-            self._current_room = new_room
-            self._steps_in_current_room = 0  
-            if new_room not in self._visited_rooms:
-                
-                shaped_reward += self.NEW_ROOM_BONUS
-                self._visited_rooms.add(new_room)
-                self._room_visit_count[new_room] = 1
-            else:
-                
-                self._room_visit_count[new_room] = self._room_visit_count.get(new_room, 0) + 1
-                if self._room_visit_count[new_room] >= self.REVISIT_THRESHOLD:
-                    shaped_reward += self.REVISIT_NUDGE
+        state_key = self._state_key(obs)
+        visits = self._state_counts.get(state_key, 0) + 1
+        self._state_counts[state_key] = visits
+        shaped_reward += self.NOVELTY_BONUS_COEF / np.sqrt(visits)
  
-        
         current_lives = info.get("lives", self._prev_lives)
         if self._prev_lives is not None and current_lives < self._prev_lives:
             shaped_reward += self.DEATH_PENALTY
@@ -270,7 +175,7 @@ class TensorBoardCallback(BaseCallback):
  
         self._episode_reward += float(self.locals["rewards"][0])
  
-       
+        # Log epsilon every step → smooth decay curve in TensorBoard.
         self._writer.add_scalar(
             "training/epsilon",
             self.model.exploration_rate,
@@ -290,7 +195,11 @@ class TensorBoardCallback(BaseCallback):
  
 # ─── Environment Builders ────────────────────────────────────────────────────
  
-def build_training_environment(seed: int, reward_shaping: bool = True) -> VecFrameStack:
+def build_training_environment(
+    seed: int,
+    reward_shaping: bool = True,
+    terminal_on_life_loss: bool = False,
+) -> VecFrameStack:
     """Create a vectorised, preprocessed Atari environment for training.
  
     Wrapper order (inner → outer):
@@ -304,8 +213,9 @@ def build_training_environment(seed: int, reward_shaping: bool = True) -> VecFra
     bonus/penalty survives clipping and guides learning correctly.
  
     Args:
-        seed:            Random seed for reproducibility.
-        reward_shaping:  Apply VentureRewardWrapper (default True).
+        seed:                   Random seed for reproducibility.
+        reward_shaping:         Apply VentureRewardWrapper (default True).
+        terminal_on_life_loss:  If True, each life ends an episode.
  
     Returns:
         A VecFrameStack-wrapped vectorised environment ready for DQN.
@@ -314,11 +224,16 @@ def build_training_environment(seed: int, reward_shaping: bool = True) -> VecFra
         base = gym.make(ENV_ID)
         if reward_shaping:
             base = VentureRewardWrapper(base)
-       
-        base = AtariWrapper(base, terminal_on_life_loss=True, clip_reward=False)
+        # Preserve shaped reward magnitude in the environment; clip in wrapper if needed.
+        base = AtariWrapper(
+            base,
+            terminal_on_life_loss=terminal_on_life_loss,
+            clip_reward=False,
+        )
         return base
  
     env = DummyVecEnv([_make_shaped_env])
+    env.seed(seed)
     env = VecFrameStack(env, n_stack=N_STACK)
     return env
  
@@ -335,7 +250,7 @@ def build_playing_environment() -> VecFrameStack:
     """
     def _make_single_env() -> AtariWrapper:
         base_env = gym.make(ENV_ID, render_mode="human")
-        return AtariWrapper(base_env, terminal_on_life_loss=True, clip_reward=False)
+        return AtariWrapper(base_env, terminal_on_life_loss=False, clip_reward=False)
  
     env = DummyVecEnv([_make_single_env])
     env = VecFrameStack(env, n_stack=N_STACK)
@@ -353,21 +268,19 @@ def train_agent(
 ) -> float:
     """Train a DQN agent on Venture-v5 and save the model.
  
-    Baseline hyperparameter rationale (tuned for Venture's sparse reward signal):
- 
-      learning_rate         1e-4   — standard SB3-Zoo Atari lr; stable for CNNs
-      buffer_size           100_000 — larger buffer helps with Venture's sparse
-                                      rewards: diverse experiences improve learning
-      learning_starts       25_000 — fill 25% of buffer before updating; ensures
-                                      enough varied transitions before first update
-      batch_size            32     — smaller batches work well with sparse rewards
-      gamma                 0.99   — standard Atari discount factor
-      train_freq            4      — one update every 4 env steps (DQN paper)
-      target_update         2_000  — moderate sync interval; balances stability
-                                     and tracking of policy improvement
-      exploration_fraction  0.25   — longer exploration critical for sparse Venture;
-                                     ε decays over 25% of training steps
-      exploration_final_eps 0.01   — 1% random floor; standard Atari value
+        Baseline hyperparameter rationale (tuned for Venture's sparse reward signal):
+
+            learning_rate         1e-4    — stable but not too slow updates
+            buffer_size           150_000 — diverse replay while keeping RAM below limit
+            learning_starts       20_000  — start learning earlier to avoid long cold start
+            batch_size            64      — stronger gradients and better GPU utilisation
+            gamma                 0.99    — long-horizon credit assignment for sparse rewards
+            train_freq            4       — one update every 4 env steps (DQN paper)
+            gradient_steps        2       — more learning per env interaction
+            target_update         8_000   — slower target updates for extra stability
+            exploration_fraction  0.60    — stay exploratory longer to escape local loops
+            exploration_final_eps 0.05    — keep residual randomness in late training
+            optimize_memory_usage True    — lower replay RAM footprint
  
     Args:
         model_path:      Path (without .zip) where the trained model is saved.
@@ -379,32 +292,84 @@ def train_agent(
     Returns:
         Mean episode reward over the last episodes in SB3's episode info buffer.
     """
+
+    def _estimate_replay_ram_gb(buffer_size: int, optimize_memory_usage: bool) -> float:
+        # Approximate replay RAM usage for 84x84x4 uint8 stacked observations.
+        obs_bytes = 84 * 84 * N_STACK
+        obs_storage = obs_bytes if optimize_memory_usage else obs_bytes * 2
+        per_transition_overhead = 16
+        total_bytes = buffer_size * (obs_storage + per_transition_overhead)
+        return total_bytes / (1024 ** 3)
+
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
  
     if hparams is None:
         hparams = dict(
             env_id=ENV_ID,
-            learning_rate=5e-5,
-            buffer_size=200_000,
-            learning_starts=25_000,
+            learning_rate=1e-4,
+            buffer_size=150_000,
+            learning_starts=20_000,
             batch_size=64,
             gamma=0.99,
-            train_freq=1,
-            target_update_interval=2_000,
-            exploration_fraction=0.40,
-            exploration_final_eps=0.01,
+            train_freq=4,
+            gradient_steps=2,
+            target_update_interval=8_000,
+            exploration_fraction=0.60,
+            exploration_final_eps=0.05,
             reward_shaping=True,
+            terminal_on_life_loss=False,
+            optimize_memory_usage=True,
+            handle_timeout_termination=False,
             timesteps=timesteps,
             seed=seed,
         )
- 
 
+    hparams = dict(hparams)
+    hparams["buffer_size"] = int(hparams["buffer_size"])
+    hparams["learning_starts"] = min(
+        int(hparams["learning_starts"]),
+        max(1_000, hparams["buffer_size"] // 2),
+    )
+    hparams["gradient_steps"] = int(hparams.get("gradient_steps", 1))
+    hparams["optimize_memory_usage"] = bool(hparams.get("optimize_memory_usage", True))
+    hparams["handle_timeout_termination"] = bool(
+        hparams.get(
+            "handle_timeout_termination",
+            not hparams["optimize_memory_usage"],
+        )
+    )
+
+    if hparams["optimize_memory_usage"] and hparams["handle_timeout_termination"]:
+        print(
+            "[WARN] optimize_memory_usage=True is incompatible with "
+            "handle_timeout_termination=True in SB3 ReplayBuffer. "
+            "Forcing handle_timeout_termination=False."
+        )
+        hparams["handle_timeout_termination"] = False
+
+    est_ram_gb = _estimate_replay_ram_gb(
+        buffer_size=hparams["buffer_size"],
+        optimize_memory_usage=hparams["optimize_memory_usage"],
+    )
+    print(
+        "Replay buffer estimate: "
+        f"~{est_ram_gb:.2f} GB "
+        f"(buffer={hparams['buffer_size']:,}, "
+        f"optimize_memory_usage={hparams['optimize_memory_usage']})"
+    )
+ 
+    # Write hparams to TensorBoard → visible in the HPARAMS tab.
     _tb_writer = SummaryWriter(log_dir=tensorboard_log)
     _tb_writer.add_hparams(hparams, metric_dict={"hparam/episode_reward": 0})
     _tb_writer.close()
  
     reward_shaping = hparams.get("reward_shaping", True)
-    env = build_training_environment(seed=seed, reward_shaping=reward_shaping)
+    terminal_on_life_loss = hparams.get("terminal_on_life_loss", False)
+    env = build_training_environment(
+        seed=seed,
+        reward_shaping=reward_shaping,
+        terminal_on_life_loss=terminal_on_life_loss,
+    )
  
     model = DQN(
         policy="CnnPolicy",
@@ -416,10 +381,14 @@ def train_agent(
         tau=1.0,
         gamma=hparams["gamma"],
         train_freq=hparams["train_freq"],
-        gradient_steps=1,
+        gradient_steps=hparams["gradient_steps"],
         target_update_interval=hparams["target_update_interval"],
         exploration_fraction=hparams["exploration_fraction"],
         exploration_final_eps=hparams["exploration_final_eps"],
+        optimize_memory_usage=hparams["optimize_memory_usage"],
+        replay_buffer_kwargs={
+            "handle_timeout_termination": hparams["handle_timeout_termination"],
+        },
         verbose=1,
         tensorboard_log=tensorboard_log,
         seed=seed,
@@ -527,9 +496,17 @@ def run_sweep(
             "batch_size":             cfg["batch_size"],
             "gamma":                  cfg["gamma"],
             "train_freq":             cfg["train_freq"],
+            "gradient_steps":         cfg.get("gradient_steps", 1),
             "target_update_interval": cfg["target_update_interval"],
             "exploration_fraction":   cfg["exploration_fraction"],
             "exploration_final_eps":  cfg["exploration_final_eps"],
+            "reward_shaping":         cfg.get("reward_shaping", True),
+            "terminal_on_life_loss":  cfg.get("terminal_on_life_loss", False),
+            "optimize_memory_usage":  cfg.get("optimize_memory_usage", True),
+            "handle_timeout_termination": cfg.get(
+                "handle_timeout_termination",
+                not cfg.get("optimize_memory_usage", True),
+            ),
             "timesteps":              exp_timesteps,
             "seed":                   seed,
         }
@@ -641,6 +618,9 @@ def parse_args() -> argparse.Namespace:
  
  
 def main():
+    print("GPU Available NVIDIA:", torch.cuda.is_available())
+    print("GPU Name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU")
+    print("CUDA Version:", torch.version.cuda)
     args = parse_args()
  
     if args.mode == "train":
@@ -665,9 +645,17 @@ def main():
                 "batch_size":             cfg["batch_size"],
                 "gamma":                  cfg["gamma"],
                 "train_freq":             cfg["train_freq"],
+                "gradient_steps":         cfg.get("gradient_steps", 1),
                 "target_update_interval": cfg["target_update_interval"],
                 "exploration_fraction":   cfg["exploration_fraction"],
                 "exploration_final_eps":  cfg["exploration_final_eps"],
+                "reward_shaping":         cfg.get("reward_shaping", True),
+                "terminal_on_life_loss":  cfg.get("terminal_on_life_loss", False),
+                "optimize_memory_usage":  cfg.get("optimize_memory_usage", True),
+                "handle_timeout_termination": cfg.get(
+                    "handle_timeout_termination",
+                    not cfg.get("optimize_memory_usage", True),
+                ),
                 "timesteps":              timesteps,
                 "seed":                   args.seed,
             }
