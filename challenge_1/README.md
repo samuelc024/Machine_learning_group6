@@ -65,6 +65,12 @@ For Venture, it is recommended to train with at least 1000000 timesteps for more
 python venture_dqn.py --mode train --model-path models/venture_dqn --timesteps 1000000
 ```
 
+To train like our best run use:
+
+```bash
+python venture_dqn.py --mode train --model-path models/venture_dqn --timesteps 1500000
+```
+
 ### 3) Train a specific experiment from sweep file
 
 ```bash
@@ -81,6 +87,12 @@ python venture_dqn.py --mode sweep --sweep-file sweep_configs.json --model-path 
 
 ```bash
 python venture_dqn.py --mode play --model-path models/venture_dqn --episodes 3
+```
+
+To see our best agent use [Venture Model 3](models\venture3.zip)
+
+```bash
+python venture_dqn.py --mode play --model-path models/venture3 --episodes 3
 ```
 
 ### 6) Monitor runs with TensorBoard
@@ -129,6 +141,8 @@ When running train mode without --experiment, the script uses these defaults:
 - The script prints GPU and CUDA availability at startup.
 - On RAM-limited systems, keep optimize_memory_usage=True to reduce replay buffer memory footprint.
 
-### VIDEO
+### 
+
+## VIDEO
 
 [Group 6 / Challenge 1 Video](https://drive.google.com/drive/folders/1nqwb9-S4W8uKuwVLx-iSxD-YRPQ_60Bs?usp=drive_link).
