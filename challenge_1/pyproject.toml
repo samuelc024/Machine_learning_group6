@@ -1,31 +1,24 @@
 [project]
-name = "deb-breakout"
+name = "venture-dqn challenge 1"
 version = "0.1.0"
-description = "THis is a simple game solutioner"
+description = "This is our solution for the challenge #1 for the Machine Learning Class"
 authors = [
-    {name = "Prof. Carlos Andres Sierra",email = "cavirguezs@udistrital.edu.co"}
+    {name = "Your Name",email = "you@example.com"}
 ]
-license = {text = "GNU/GPL 3.0"}
-requires-python = ">=3.11"
-
-# ── macOS dependencies ────────────────────────────────────────────────────────
-# For Linux (Ubuntu 24.04) use requirements-linux.txt instead.
-# Key differences vs Linux:
-#   - opencv-python        (macOS has a display server; use opencv-python-headless on Linux)
-#   - ale-py==0.10.1       (0.11+ requires gymnasium>=1.1.0 which breaks stable-baselines3)
-#   - gymnasium pinned <1.1.0 for stable-baselines3 compatibility
-# ─────────────────────────────────────────────────────────────────────────────
+license = "GNU/GPL 3.0"
+readme = "README.md"
+requires-python = ">=3.12"
 dependencies = [
-    "numpy<2",
-    "torch",
-    "stable-baselines3[extra]>=2.3,<3",
-    "gymnasium[atari,accept-rom-license]>=0.29.1,<1.1.0",
-    "ale-py==0.10.1",
-    "autorom[accept-rom-license]",
-    "opencv-python==4.8.1.78",
+    "torch (>=2.11.0,<3.0.0)",
+    "argparse (>=1.4.0,<2.0.0)",
+    "pathlib (>=1.0.1,<2.0.0)",
+    "numpy (>=2.4.4,<3.0.0)",
+    "ale-py (>=0.11.2,<0.12.0)",
+    "gymnasium (>=1.2.3,<2.0.0)",
+    "stable-baselines3 (>=2.8.0,<3.0.0)",
+    "tensorboard (>=2.20.0,<3.0.0)",
     "tqdm",
-    "rich",
-    "tensorboard",
+    "rich"
 ]
 
 [build-system]
