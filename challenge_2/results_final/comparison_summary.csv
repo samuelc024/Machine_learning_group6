@@ -1,0 +1,7 @@
+,accuracy,accuracy,f1_macro,f1_macro,f1_weighted,f1_weighted,auc,auc
+,mean,std,mean,std,mean,std,mean,std
+experiment,,,,,,,,
+baseline_lr,0.5348,0.003,0.5044,0.003,0.5291,0.0028,0.7894,0.0015
+baseline_rf,0.5527,0.0027,0.5295,0.0028,0.5516,0.0025,0.7962,0.0012
+ssl_self_training_lr,0.5049,0.0038,0.5033,0.0034,0.5163,0.0039,0.7847,0.0016
+ssl_self_training_rf,0.5391,0.003,0.5272,0.0028,0.5469,0.0028,0.7933,0.0012
