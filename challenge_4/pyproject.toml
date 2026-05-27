@@ -1,0 +1,22 @@
+[project]
+name = "challenge4"
+version = "0.1.0"
+description = "Implementación de GAIL para el entorno ALE/Venture-v5"
+authors = [
+    {name = "Giovanni Vargas"},
+    {name = "Nahin Peñaranda"},
+    {name = "Samuel Casas"}
+]
+dependencies = [
+    "torch>=2.0.0",
+    "gymnasium[atari,accept-rom-license]>=0.28.1",
+    "ale-py>=0.10.0",
+    "numpy>=1.24.0",
+    "matplotlib",
+    "tensorboard",
+    "d4rl-atari @ git+https://github.com/takuseno/d4rl-atari.git"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

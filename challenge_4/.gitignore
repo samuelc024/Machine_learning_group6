@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+*.pt
+
+*.npz
+
+videos_gail/
+
+hp_results.csv
+demos_info.txt

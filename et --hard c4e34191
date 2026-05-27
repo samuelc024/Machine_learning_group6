@@ -1,0 +1,12 @@
+[33mf0dd0bd1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{0}: reset: moving to f0dd0bd1
+[33mc4e34191[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{1}: reset: moving to c4e34191
+[33mf0dd0bd1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{2}: reset: moving to HEAD@{0}
+[33mf0dd0bd1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{3}: commit (amend): correccion commit, version gail
+[33m9be3549b[m HEAD@{4}: commit: intento gail con recompensas hibridas
+[33mc4e34191[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{5}: reset: moving to HEAD~1
+[33ma49f671d[m HEAD@{6}: commit: feat: añadir estructura limpia de challenge_4 sin archivos pesados
+[33mc4e34191[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{7}: reset: moving to HEAD~1
+[33m13e259ba[m HEAD@{8}: commit: feat: intento recompensas hibridas
+[33mc4e34191[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{9}: reset: moving to HEAD~1
+[33m26c00b5c[m HEAD@{10}: commit: feat: INtento de manejar recompensas hibridas
+[33mc4e34191[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{11}: clone: from https://github.com/samuelc024/Machine_learning_group6.git
