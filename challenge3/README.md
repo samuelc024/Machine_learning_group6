@@ -184,7 +184,7 @@ Requires **Python >= 3.11, < 3.15** (enforced by `pyproject.toml`).
 ### 3) Activate the Poetry shell (optional)
 
 ```bash
-poetry shell
+poetry env activate
 ```
 
 After this, all `python` and `tensorboard` commands run inside the managed environment.
