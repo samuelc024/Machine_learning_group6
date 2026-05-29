@@ -1,0 +1,62 @@
+{
+  "_comment": "Challenge 5 — Grupo 6 | Housing & Urban Development",
+
+  "data": {
+    "url": "https://www2.census.gov/programs-surveys/acs/data/pums/2022/1-Year/csv_hus.zip",
+    "zip_file": "csv_hus.zip",
+    "n_sample": 20000,
+    "missing_threshold": 0.60,
+    "low_variance_unique_threshold": 2
+  },
+
+  "features": {
+    "all": [
+      "BDSP", "RMSP", "BLD", "YBL", "TEN",
+      "GRNTP", "SMOCP", "RNTP",
+      "HINCP", "NP", "VEH", "FS",
+      "ELEP", "GASP", "WATP",
+      "HHT", "HHL", "HUGCL", "HUPAC",
+      "GRPIP", "OCPIP"
+    ],
+    "spatial": ["BDSP", "RMSP", "BLD", "YBL", "TEN"],
+    "economic": ["GRNTP", "SMOCP", "RNTP", "HINCP", "ELEP", "GASP", "WATP", "GRPIP", "OCPIP"],
+    "household": ["NP", "VEH", "FS", "HHT", "HHL", "HUGCL", "HUPAC"]
+  },
+
+  "global_seeds": [42, 52, 62],
+
+  "pca": {
+    "variance_threshold": 0.90,
+    "n_components_2d": 2
+  },
+
+  "kmeans": {
+    "k_range": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "seeds": [42, 52, 62],
+    "n_init": 10,
+    "batch_size": 2048,
+    "metric_sample": 5000
+  },
+
+  "dbscan": {
+    "min_samples_list": [3, 5, 10],
+    "eps_sweep_steps": 6,
+    "metric_sample": 5000,
+    "use_2x_d": true
+  },
+
+  "hierarchical": {
+    "linkages": ["ward", "complete", "average"],
+    "k_range": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "sample_limit": 5000,
+    "dendrogram_truncate_level": 4,
+    "metric_sample": 5000
+  },
+
+  "output": {
+    "base_dir": "runs",
+    "figures_subdir": "figures",
+    "results_subdir": "results",
+    "dpi": 120
+  }
+}

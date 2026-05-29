@@ -1,0 +1,107 @@
+% Generated paper for Challenge 5 — Grupo 6
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{longtable}
+\usepackage{float}
+\geometry{margin=1in}
+
+\title{Clustering Housing Characteristics in ACS PUMS (Challenge 5 — Grupo 6)}
+\author{Grupo 6}
+\date{May 28, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report documents a reproducible clustering analysis performed on the 2022 ACS PUMS housing microdata to identify meaningful housing clusters. We evaluate multiple feature subsets and algorithms (K‑Means, DBSCAN, hierarchical) and provide recommendations for interpretable segmentation useful for policy and downstream analysis. All experiments and configuration used for this study are deposited alongside this manuscript.
+\end{abstract}
+
+\section{Introduction}
+The objective of this work is to produce robust and interpretable clusters of housing units based on publicly available ACS PUMS housing microdata (2022 1‑Year sample). We focus on feature subsets that represent spatial, economic, and household characteristics, and we compare clustering algorithms and dimensionality reduction strategies to provide reproducible recommendations.
+
+\section{Data and preprocessing}
+\subsection{Data source and sampling}
+Data were obtained from the ACS PUMS housing CSV (2022 1‑Year): the original source used in the experiments is listed in the run configuration. A sample of $n=20{,}000$ records was used for the exploratory experiments and metric estimation.
+
+\subsection{Feature selection}
+Feature subsets are defined in the experimental configuration and include `spatial`, `economic`, `household` and `all` (full). The configuration file shipped with the run is included in the experiment directory and documents the exact features used.
+
+\subsection{Filtering and transforms}
+Features with more than 60\% missing values were removed. Low-variance (near-constant) features were removed using a threshold of 2 unique values. Numeric features with highly skewed distributions (for example incomes and monetary fields) were log-transformed where appropriate before scaling. All features were standardized prior to distance-based modeling.
+
+\section{Dimensionality reduction}
+Principal Component Analysis (PCA) was used to summarize multivariate variation and for visualization.
+The PCA selection criterion retained components explaining 90\% of variance (config: `variance_threshold = 0.90`). The cumulative variance curve indicates approximately 11 components are required to reach the 90\% threshold.
+
+PCA was used in two roles:
+\begin{itemize}
+  \item visualization (2D PCA plots);
+  \item ablation experiments comparing clustering on the full feature set versus PCA-reduced space (see ablation CSV in the results directory).
+\end{itemize}
+
+\section{Clustering methods and evaluation}
+We evaluated three clustering families:
+\begin{description}
+  \item[K‑Means:] Range $k = 2\ldots12$, multiple seeds $[42,52,62]$, $n\_init = 10$. Metrics: within-cluster sum of squares (elbow) and silhouette score.
+  \item[DBSCAN:] $\mathrm{min\_samples} \in \{3,5,10\}$; eps values chosen from k‑NN distance curves (k‑NN plots included in figures). DBSCAN highlights dense cores and isolates noise/outliers.
+  \item[Hierarchical:] Linkages `ward`, `complete`, `average`. Dendrograms computed on a sample of up to 5000 units for tractability.
+\end{description}
+
+Evaluation used multiple diagnostics: elbow curves, silhouette score, dendrogram structure, k‑NN distance plots for DBSCAN, and cluster profiling (aggregated per-cluster feature summaries).
+
+\section{Results}
+\subsection{PCA and dimensionality}
+The PCA cumulative variance plot (included in the figures) reaches 90\% explained variance at approximately 11 components. As such, clustering on PCA-space with 11 components provides a balance between preserving variance and computational efficiency.
+
+\subsection{K‑Means}
+Elbow curves show a steady decline in sum-of-squares as $k$ increases. Silhouette scores generally favor small $k$ (2–4) for `economic` and `household` subsets, supporting the selection of low-k clusters for interpretability. K‑Means cluster profiles for K=2 (economic subset) show clear separation across income and cost variables.
+
+\subsection{DBSCAN}
+DBSCAN successfully identifies dense cores and isolates scattered points as noise when appropriate eps/min_samples combinations are chosen. However, results are sensitive to eps; k‑NN distance plots (included) were used to select reasonable eps values.
+
+\subsection{Hierarchical clustering}
+Dendrograms (ward, complete, average) reveal nested clustering structure. Hierarchical methods are particularly helpful to inspect multi-scale grouping and to choose coarse-grained cluster counts.
+
+\subsection{Cluster interpretability}
+Cluster profiling (heatmaps and CSV files in the results folder) shows interpretable groupings across economic and household features: clusters capture differences in household size, income, rent/cost proxies, and vehicle ownership.
+
+\section{Recommendations}
+For interpretable segmentation use the `economic` or `household` subsets with K‑Means and small $k$ (2–4), complemented by DBSCAN to flag potential outliers and hierarchical clustering to understand multi-scale structure. If using the full set, reduce dimensionality to the first ~11 PCA components before clustering.
+
+\section{Reproducibility and artifacts}
+The configuration used for these experiments is in the run directory. For convenience, the key artifacts are listed below and available next to this manuscript.
+
+\begin{itemize}
+  \item Configuration JSON: \texttt{runs/20260528_181538/config_used.json}
+  \item Result grids: \texttt{runs/20260528_181538/results/kmeans_grid.csv}, \texttt{dbscan_grid.csv}, \texttt{hierarchical_grid.csv}
+  \item Metrics summary: \texttt{runs/20260528_181538/results/metrics_comparison.csv}
+  \item Cluster profiles: \texttt{runs/20260528_181538/results/cluster_profiles_kmeans.csv}
+  \item Figures folder: \texttt{runs/20260528_181538/figures/}
+\end{itemize}
+
+To re-run the experiments locally, use the project's runner script. Example command (from the challenge_5 directory):
+\begin{verbatim}
+.venv/bin/python3 challenge5_grupo6.py --config config.json
+\end{verbatim}
+
+\section{Conclusions}
+Clustering ACS PUMS housing records yields actionable segmentation along economic and household axes. Small K in K‑Means provides interpretable partitions; DBSCAN and hierarchical clustering are useful complements. The full configuration, code, and figures are provided to enable replication and further analysis.
+
+\section*{Appendix: Important file paths}
+\begin{verbatim}
+challenge_5/runs/20260528_181538/config_used.json
+challenge_5/runs/20260528_181538/results/
+challenge_5/runs/20260528_181538/figures/
+\end{verbatim}
+
+\end{document}

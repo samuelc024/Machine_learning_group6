@@ -1,0 +1,4 @@
+Algoritmo,Clusters,Ruido (%),Silhouette ↑,Davies-Bouldin ↓,Calinski-Harabasz ↑
+"K-Means (k=2, seed=62)",2,0.0,0.2486,1.9416,3995.44
+"DBSCAN (ε=6.1048, ms=10)",2,0.1,0.7804,0.3423,303.9
+"Hierarchical (k=2, average)",2,0.0,0.772,0.4883,167.52
