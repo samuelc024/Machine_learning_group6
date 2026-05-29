@@ -42,7 +42,7 @@ except Exception as e:
 
 
 
-def evaluar_agente_gail(model_path="gail_long1354_generator.pt", episodios=5):
+def evaluar_agente_gail(model_path="gail_long13_generator.pt", episodios=5):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

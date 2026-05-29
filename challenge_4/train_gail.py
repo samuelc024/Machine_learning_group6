@@ -108,9 +108,9 @@ def train_gail(env_id="ALE/Venture-v5", demos_path="demos_humano.npz", bc_model_
     print("⚔️ INICIA EL COMBATE ADVERSARIAL ⚔️")
     print("Presiona Ctrl+C en cualquier momento para detener y guardar seguro.")
     print("="*50)
-
+    historial_metricas = []
     pbar = tqdm(range(episodes), desc="Entrenando GAIL", unit="ep")
-
+    
     try:
         for ep in pbar:
             obs, _ = env.reset(seed=42 + ep)
@@ -255,6 +255,21 @@ def train_gail(env_id="ALE/Venture-v5", demos_path="demos_humano.npz", bc_model_
             # D. REPORTES EN CONSOLA (actualizar barra de progreso)
             if (ep + 1) % 10 == 0:
                 avg_reward = np.mean(rewards_buffer) if len(rewards_buffer) > 0 else 0.0
+                
+                # --- NUEVO: CALCULAR PRECISIÓN Y GUARDAR EN LISTA ---
+                acc_expert = (prob_expert > 0.5).float().mean().item()
+                acc_agent = (prob_agent < 0.5).float().mean().item()
+                disc_accuracy = (acc_expert + acc_agent) / 2.0
+                
+                historial_metricas.append([
+                    ep + 1, 
+                    avg_reward, 
+                    loss_disc.item(), 
+                    loss_gen.item(), 
+                    disc_accuracy
+                ])
+                # ----------------------------------------------------
+
                 # sin seguimiento de habitaciones: coverage/avg_subs no aplican
                 coverage = 0
                 avg_subs = 0.0
@@ -277,6 +292,14 @@ def train_gail(env_id="ALE/Venture-v5", demos_path="demos_humano.npz", bc_model_
         torch.save(generator.state_dict(), f"{save_prefix}_generator.pt")
         torch.save(discriminator.state_dict(), f"{save_prefix}_discriminator.pt")
         env.close()
+
+        # --- NUEVO: EXPORTAR EL HISTORIAL A CSV ---
+        import pandas as pd
+        df = pd.DataFrame(historial_metricas, columns=["Episodio", "Recompensa_Media", "Loss_Disc", "Loss_Gen", "Precision_Disc"])
+        df.to_csv(f"{save_prefix}_metrics.csv", index=False)
+        print(f"📊 Métricas exportadas exitosamente a '{save_prefix}_metrics.csv'")
+        # ------------------------------------------
+
         print("✅ ¡Modelos GAIL guardados a salvo!")
     
 if __name__ == "__main__":

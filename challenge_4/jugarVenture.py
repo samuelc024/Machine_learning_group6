@@ -4,8 +4,8 @@ import ale_py
 import gymnasium as gym
 import numpy as np
 import pygame
-for i in range(1):
-    def grabar_partida_humana(max_steps=2000, save_path="micro_demos/demos_humano.npz"):
+for i in range(10):
+    def grabar_partida_humana(max_steps=500, save_path="micro_demos/demos_humano"+str(i)+".npz"):
         # Iniciamos el entorno con los mismos wrappers de la red neuronal
         env = gym.make("ALE/Venture-v5", render_mode="human", frameskip=1)
         env = gym.wrappers.AtariPreprocessing(env, frame_skip=4, grayscale_obs=True, screen_size=84, scale_obs=False)
@@ -76,4 +76,4 @@ for i in range(1):
 
     if __name__ == "__main__":
         # 5000 pasos a esta velocidad son aproximadamente 5-6 minutos de juego concentrado
-        grabar_partida_humana(max_steps=2000)
+        grabar_partida_humana(max_steps=500)

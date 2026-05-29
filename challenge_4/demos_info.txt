@@ -1,0 +1,10 @@
+# Metadatos del Conjunto de Demostraciones (Challenge 4)
+
+* Fuente de las demostraciones: Experto Humano (Self-collected). En lugar de usar un checkpoint de DQN, se desarrolló una interfaz en Pygame para capturar el comportamiento agresivo y de búsqueda de tesoros en tiempo real, esto dado la pobreza de los resultados de loa anteriores checkpoints y naja calidad de las demostraciones de internet.
+* Archivo consolidado: demos_humano.npz
+* Total de pasos recolectados: 11000 pasos,3 ejecuciones de 2000 pasos y 10 ejecuciones de 500 pasos cada una.
+* Rendimiento del experto (Estimado sobre los micro-juegos):
+  - Retorno Medio (Mean Return): 0 puntos.
+  - Desviación Estándar (Std Return): 0 puntos.
+
+Nota sobre la calidad: Se garantizó una recolección de alta calidad enfocada en la exploración profunda de las mazmorras (Room exploration) y la recolección de tesoros, evitando el comportamiento conservador típico de los agentes de RL en Venture.

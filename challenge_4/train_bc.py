@@ -32,7 +32,7 @@ except Exception:
         AtariActorCritic = getattr(module, "AtariActorCritic")
     else:
         raise ImportError(
-            "Could not import 'models'. Make sure 'src/models.py' exists.")
+            "Could not import 'models'. Make sure 'models.py' exists.")
 
 def make_env(env_id="ALE/Venture-v5", seed=0):
     try:

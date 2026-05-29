@@ -1,7 +1,7 @@
 [project]
 name = "challenge4"
 version = "0.1.0"
-description = "Implementación de GAIL para el entorno ALE/Venture-v5"
+description = "Implementación de BC y GAIL para el entorno ALE/Venture-v5"
 authors = [
     {name = "Giovanni Vargas"},
     {name = "Nahin Peñaranda"},
@@ -9,14 +9,29 @@ authors = [
 ]
 dependencies = [
     "torch>=2.0.0",
+    "numpy>=1.24.0",
     "gymnasium[atari,accept-rom-license]>=0.28.1",
     "ale-py>=0.10.0",
-    "numpy>=1.24.0",
-    "matplotlib",
-    "tensorboard",
-    "d4rl-atari @ git+https://github.com/takuseno/d4rl-atari.git"
+    "pygame>=2.5.0",
+    "moviepy>=1.0.3",
+    "tqdm>=4.65.0",
+    "pandas>=2.0.0",
+    "matplotlib>=3.7.0",
+    "opencv-python>=4.8.0",
+    "seaborn>=0.12.0"
 ]
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+[tool.setuptools]
+py-modules = [
+    "eval_bc",
+    "eval_gail",
+    "jugarVenture",
+    "merge_demos",
+    "models",
+    "train_bc",
+    "train_gail",
+    "ver_experto"
+]
