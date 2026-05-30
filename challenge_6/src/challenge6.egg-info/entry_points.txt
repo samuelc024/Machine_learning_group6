@@ -1,0 +1,2 @@
+[console_scripts]
+challenge6-train = challenge6.cli:main
