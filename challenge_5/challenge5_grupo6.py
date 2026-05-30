@@ -2,14 +2,14 @@
 Challenge 5 — Grupo 6: Housing & Urban Development
 ====================================================
 Uso:
-    python challenge5_grupo6.py                     # usa config.json del directorio actual
-    python challenge5_grupo6.py --config mi.json    # usa un config personalizado
+    python challenge5_grupo6.py                     # config.json
+    python challenge5_grupo6.py --config mi.json    # config given in mi.json
 
 Salida:
     runs/<timestamp>/
-        config_used.json      copia del config que generó este run
-        figures/              todas las figuras .png
-        results/              todos los .csv con métricas
+        config_used.json      copy config used for this run
+        figures/              figures .png
+        results/              .csv with metrics and profiles
 """
 
 import argparse
@@ -42,13 +42,8 @@ from sklearn.metrics          import (silhouette_score,
                                       calinski_harabasz_score)
 from scipy.cluster.hierarchy  import dendrogram, linkage as scipy_linkage
 
-# ── try optional UMAP ─────────────────────────────────────────────────────────
-try:
-    import umap as umap_lib
-    HAS_UMAP = True
-except ImportError:
-    HAS_UMAP = False
-    print("⚠  umap-learn no instalado — se omitirán las visualizaciones UMAP")
+import umap as umap_lib
+HAS_UMAP = True
 
 # =============================================================================
 # CLI
@@ -67,7 +62,7 @@ with open(CONFIG_PATH) as f:
     C = json.load(f)
 
 # =============================================================================
-# SETUP DE DIRECTORIOS
+# SETUP PATHS AND RUN DIRECTORIES
 # =============================================================================
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUN_DIR   = Path(C["output"]["base_dir"]) / timestamp
@@ -89,7 +84,7 @@ print(f"  Run directory: {RUN_DIR}")
 print(f"{'='*60}\n")
 
 # =============================================================================
-# HELPERS DE MÉTRICAS
+# METRICS HELPER
 # =============================================================================
 def compute_metrics(X, labels, sample_size=5000, random_state=42):
     labels    = np.asarray(labels)
@@ -163,28 +158,28 @@ def scatter(ax, X_emb, labels, title):
     ax.set_xlabel("Dim 1"); ax.set_ylabel("Dim 2")
 
 # =============================================================================
-# 1. DESCARGA
+# 1. DOWNLOAD
 # =============================================================================
-print("── 1. Descarga ──")
+print("── 1. Download ──")
 ZIP_FILE = C["data"]["zip_file"]
 URL      = C["data"]["url"]
 
 if not os.path.exists(ZIP_FILE):
-    print(f"  Descargando {URL} …")
+    print(f"  Downloading {URL} …")
     urllib.request.urlretrieve(URL, ZIP_FILE)
-print("  ✓ Archivo disponible")
+print("  ✓ File available")
 
 # =============================================================================
-# 2. INSPECCIÓN DE COLUMNAS
+# 2. COLUMN INSPECTION
 # =============================================================================
-print("\n── 2. Inspección de columnas ──")
+print("\n── 2. Column Inspection ──")
 
 HOUSING_WANTED = C["features"]["all"]
 
 with zipfile.ZipFile(ZIP_FILE) as z:
     csv_names = [n for n in z.namelist() if n.endswith(".csv")]
     if not csv_names:
-        raise FileNotFoundError("No se encontraron CSV dentro del ZIP.")
+        raise FileNotFoundError("No csv files found in the zip file.")
 
     def pick_housing_csv(names):
         for key in ("hus", "housing"):
@@ -194,11 +189,11 @@ with zipfile.ZipFile(ZIP_FILE) as z:
         return names[0]
 
     csv_name = pick_housing_csv(csv_names)
-    print(f"  CSV seleccionado: {csv_name}")
+    print(f"  CSV: {csv_name}")
     with z.open(csv_name) as f:
         all_cols = list(pd.read_csv(f, nrows=0).columns)
 
-print(f"  Total columnas disponibles: {len(all_cols)}")
+print(f"  All available columns: {len(all_cols)}")
 cols_upper_map = {c.upper(): c for c in all_cols}
 
 found_cols = []
@@ -207,7 +202,7 @@ for want in HOUSING_WANTED:
     if real and real not in found_cols:
         found_cols.append(real)
 
-print(f"  Columnas de vivienda encontradas: {len(found_cols)} → {found_cols}")
+print(f"  Found columns: {len(found_cols)} → {found_cols}")
 
 if len(found_cols) < 5:
     EXCLUDE = {"WGTP","PWGTP","SERIALNO","RT","SPORDER","ADJINC","ADJHSG",
@@ -227,12 +222,12 @@ if len(found_cols) < 5:
     num_cols   = sample_df.select_dtypes(include=[np.number]).columns.tolist()
     found_cols = [c for c in num_cols
                   if c.upper() not in EXCLUDE and c not in found_cols][:15]
-    print(f"  (fallback) Columnas seleccionadas: {found_cols}")
+    print(f"  (fallback) Found columns: {found_cols}")
 
 # =============================================================================
-# 3. LECTURA
+# 3. LOADING THE DATASET
 # =============================================================================
-print("\n── 3. Carga del dataset ──")
+print("\n── 3. Loading the dataset ──")
 with zipfile.ZipFile(ZIP_FILE) as z:
     with z.open(csv_name) as f:
         df_raw = pd.read_csv(f, usecols=found_cols,
@@ -243,9 +238,9 @@ df_raw.columns = [c.upper() for c in df_raw.columns]
 print(f"  Shape: {df_raw.shape}  |  RAM: {df_raw.memory_usage(deep=True).sum()/1e6:.1f} MB")
 
 # =============================================================================
-# 4. LIMPIEZA
+# 4. DATA CLEANING
 # =============================================================================
-print("\n── 4. Limpieza ──")
+print("\n── 4. Data Cleaning ──")
 N_SAMPLE = C["data"]["n_sample"]
 SEED0    = C["global_seeds"][0]
 
@@ -261,30 +256,30 @@ null_pct  = df.isnull().mean()
 miss_thr  = C["data"]["missing_threshold"]
 drop_cols = null_pct[null_pct > miss_thr].index.tolist()
 df.drop(columns=drop_cols, inplace=True)
-print(f"  Columnas eliminadas (>{miss_thr*100:.0f}% nulos): {drop_cols}")
+print(f"  Columns dropped (>{miss_thr*100:.0f}% nulls): {drop_cols}")
 
 low_var_thr = C["data"]["low_variance_unique_threshold"]
 low_var = [c for c in df.columns if df[c].dropna().nunique() <= low_var_thr]
 df.drop(columns=low_var, inplace=True)
-print(f"  Columnas varianza baja eliminadas: {low_var}")
+print(f"  Low variance columns dropped: {low_var}")
 
 if len(df) > N_SAMPLE:
     df = df.sample(N_SAMPLE, random_state=SEED0).reset_index(drop=True)
 
-print(f"  Muestra final: {df.shape}  |  columnas: {list(df.columns)}")
+print(f"  Final sample: {df.shape}  |  columns: {list(df.columns)}")
 all_feature_names = list(df.columns)
 
 # =============================================================================
-# 5. PREPROCESAMIENTO BASE
+# 5. BASE PROCESSING (imputation + scaling)
 # =============================================================================
-print("\n── 5. Preprocesamiento ──")
+print("\n── 5. Base Processing ──")
 imputer  = SimpleImputer(strategy="median")
 X_imp    = pd.DataFrame(imputer.fit_transform(df), columns=df.columns, dtype=np.float32)
 scaler   = StandardScaler()
 X_scaled = scaler.fit_transform(X_imp).astype(np.float32)
 del df
 
-print(f"  Matriz para clustering: {X_scaled.shape}")
+print(f"  Cluster matrix: {X_scaled.shape}")
 
 # =============================================================================
 # 6. EDA
@@ -304,7 +299,7 @@ for i, col in enumerate(all_feature_names[:n_cols_plot]):
 for j in range(n_cols_plot, 12):
     axes_flat[j].axis("off")
 
-plt.suptitle("ACS PUMS — Distribuciones (Housing features)", fontsize=11)
+plt.suptitle("ACS PUMS (Housing features)", fontsize=11)
 plt.tight_layout()
 savefig("eda_histograms.png")
 
@@ -312,7 +307,7 @@ plt.figure(figsize=(10, 8))
 sns.heatmap(X_imp.corr(), cmap="coolwarm", center=0,
             annot=len(all_feature_names) <= 12, fmt=".2f",
             linewidths=0.3, cbar_kws={"shrink": 0.8})
-plt.title("Correlación entre características de vivienda"); plt.tight_layout()
+plt.title("Characteristics Correlation"); plt.tight_layout()
 savefig("eda_correlation.png")
 
 # =============================================================================
@@ -324,7 +319,7 @@ pca_full  = PCA(random_state=SEED0)
 pca_full.fit(X_scaled)
 cumvar    = np.cumsum(pca_full.explained_variance_ratio_)
 n_comp    = max(2, int(np.searchsorted(cumvar, var_thr)) + 1)
-print(f"  Componentes para ≥{var_thr*100:.0f}% varianza: {n_comp}")
+print(f"  Components for ≥{var_thr*100:.0f}% variance: {n_comp}")
 
 pca      = PCA(n_components=n_comp, random_state=SEED0)
 X_pca    = pca.fit_transform(X_scaled).astype(np.float32)
@@ -336,8 +331,8 @@ plt.figure(figsize=(7, 3))
 plt.plot(range(1, len(cumvar)+1), cumvar*100, marker="o", ms=3, color="#2ca02c")
 plt.axhline(var_thr*100, ls="--", color="red",  lw=1, label=f"{var_thr*100:.0f}%")
 plt.axvline(n_comp,      ls="--", color="gray", lw=1)
-plt.xlabel("Componentes"); plt.ylabel("Varianza acumulada (%)"); plt.grid(alpha=0.3)
-plt.legend(); plt.title("PCA — Varianza explicada"); plt.tight_layout()
+plt.xlabel("Componentes"); plt.ylabel("Acumulate variance (%)"); plt.grid(alpha=0.3)
+plt.legend(); plt.title("PCA — Variance"); plt.tight_layout()
 savefig("pca_variance.png")
 
 # UMAP (opcional)
@@ -346,17 +341,17 @@ if HAS_UMAP:
     reducer = umap_lib.UMAP(n_components=2, n_neighbors=30, min_dist=0.1,
                              low_memory=True, random_state=SEED0)
     X_umap  = reducer.fit_transform(X_pca).astype(np.float32)
-    print("  ✓ UMAP completado")
+    print("  ✓ UMAP completed")
 else:
     X_umap = None
 
 # =============================================================================
-# 8. FEATURE SUBSETS (para ablación de dominio)
+# 8. FEATURE SUBSETS
 # =============================================================================
 print("\n── 8. Feature subsets ──")
 
 def build_subset_matrix(subset_keys):
-    """Construye X_scaled para un subconjunto de features del config."""
+    """Builds X_scaled for a subset of features from the config."""
     cols_wanted = C["features"].get(subset_keys, [])
     cols_available = [c for c in cols_wanted if c in X_imp.columns]
     if len(cols_available) < 2:
@@ -376,10 +371,10 @@ if spatial_scaled   is not None: subsets["spatial"]   = (spatial_scaled,   spati
 if economic_scaled  is not None: subsets["economic"]  = (economic_scaled,  economic_cols)
 if household_scaled is not None: subsets["household"] = (household_scaled, household_cols)
 
-print(f"  Subsets disponibles: {list(subsets.keys())}")
+print(f"  Available subsets: {list(subsets.keys())}")
 
 # =============================================================================
-# 9. K-MEANS — GRID COMPLETO (elbow + silhouette, múltiples seeds)
+# 9. K-MEANS — GRID DONE (elbow + silhouette, multiples seeds)
 # =============================================================================
 print("\n── 9. K-Means grid ──")
 
@@ -392,7 +387,7 @@ KM_METR_SAMP = C["kmeans"]["metric_sample"]
 all_km_rows = []
 
 for subset_name, (X_sub, _) in subsets.items():
-    # PCA para el subset
+    # PCA for the subsets
     pca_sub = PCA(n_components=min(n_comp, X_sub.shape[1]), random_state=SEED0)
     X_sub_pca = pca_sub.fit_transform(X_sub).astype(np.float32)
 
@@ -448,13 +443,13 @@ best_km_seed = int(
 )
 print(f"\n  → Mejor k = {best_k}  (seed={best_km_seed})")
 
-# Label final de K-Means sobre X_pca
+# Label final de K-Means oveer X_pca
 km_final  = MiniBatchKMeans(n_clusters=best_k, n_init=KM_N_INIT,
                              random_state=best_km_seed, batch_size=KM_BATCH)
 labels_km = km_final.fit_predict(X_pca)
 
 # =============================================================================
-# 10. DBSCAN — grid sobre min_samples + eps sweep
+# 10. DBSCAN — grid over min_samples + eps sweep
 # =============================================================================
 print("\n── 10. DBSCAN grid ──")
 
@@ -517,7 +512,7 @@ n_cl_db    = len(set(labels_db)) - (1 if -1 in labels_db else 0)
 print(f"  Clusters: {n_cl_db}  |  Ruido: {noise_frac:.3f}")
 
 # =============================================================================
-# 11. HIERARCHICAL — grid por linkage + dendrogram
+# 11. HIERARCHICAL — grid for linkage + dendrogram
 # =============================================================================
 print("\n── 11. Hierarchical grid ──")
 
@@ -527,14 +522,13 @@ HC_SAMPLE     = C["hierarchical"]["sample_limit"]
 HC_TRUNC_LVL  = C["hierarchical"]["dendrogram_truncate_level"]
 HC_METR_SAMP  = C["hierarchical"]["metric_sample"]
 
-# Muestra fija para HC
 np.random.seed(SEED0)
 idx_hc  = (np.random.choice(len(X_pca), min(HC_SAMPLE, len(X_pca)), replace=False)
            if len(X_pca) > HC_SAMPLE else np.arange(len(X_pca)))
 X_hc    = X_pca[idx_hc]
 print(f"  Muestra para HC: {len(X_hc)} puntos")
 
-# Dendrogram por cada linkage
+# Dendrogram
 fig_dend, axes_dend = plt.subplots(1, len(HC_LINKAGES), figsize=(6 * len(HC_LINKAGES), 5))
 if len(HC_LINKAGES) == 1:
     axes_dend = [axes_dend]
@@ -576,17 +570,16 @@ print(f"\n  → Mejor linkage={best_lnk}  k={best_hc_k}")
 
 hc_final  = make_hc(n_clusters=best_hc_k, lnk=best_lnk)
 labels_hc = hc_final.fit_predict(X_hc)
-# Extender labels al dataset completo (idx no incluidos → −2)
+# Extend labels to full X_pca (assign -2 to non-sampled points)
 labels_hc_full = np.full(len(X_pca), -2, dtype=int)
 labels_hc_full[idx_hc] = labels_hc
 
-# Para métricas solo usar la muestra
 labels_hc_use = labels_hc
 
 # =============================================================================
-# 12. DIMENSIONALITY ABLATION (full vs PCA-reduced)
+# 12. DIMENSIONALITY ABLATION COMPARISON (FULL vs PCA)
 # =============================================================================
-print("\n── 12. Ablación de dimensionalidad ──")
+print("\n── 12. Dimensionality Ablation ──")
 
 ablation_rows = []
 for rep_name, X_rep in [("full_scaled", X_scaled), ("pca_reduced", X_pca)]:
@@ -607,9 +600,9 @@ df_ablation.to_csv(RES_DIR / "ablation_full_vs_pca.csv", index=False)
 print(f"  ✓ {RES_DIR / 'ablation_full_vs_pca.csv'}")
 
 # =============================================================================
-# 13. TABLA COMPARATIVA FINAL
+# 13. FINAL
 # =============================================================================
-print("\n── 13. Tabla comparativa ──")
+print("\n── 13. Table ──")
 
 def metrics_row(X, labels, algo_label, sample_size=5000):
     m = compute_metrics(X, labels, sample_size=sample_size, random_state=SEED0)
@@ -634,9 +627,9 @@ df_comp.to_csv(RES_DIR / "metrics_comparison.csv", index=False)
 print(f"\n  ✓ {RES_DIR / 'metrics_comparison.csv'}")
 
 # =============================================================================
-# 14. VISUALIZACIONES 2D
+# 14. VIEWS
 # =============================================================================
-print("\n── 14. Visualizaciones 2D ──")
+print("\n── 14. Views 2D ──")
 
 ALGO_LABELS = {
     f"K-Means k={best_k}":   labels_km,
@@ -662,9 +655,9 @@ if X_umap is not None:
     savefig("clusters_umap.png")
 
 # =============================================================================
-# 15. PERFIL DE CLUSTERS (K-Means)
+# 15. CLUSTERS PROFILES
 # =============================================================================
-print("\n── 15. Perfil de clusters ──")
+print("\n── 15. Clusters Profiles ──")
 
 df_prof = X_imp.copy()
 df_prof["cluster"] = labels_km
@@ -677,12 +670,12 @@ prof_norm = (profile - profile.min()) / (profile.max() - profile.min() + 1e-9)
 plt.figure(figsize=(11, max(3, best_k * 0.7)))
 sns.heatmap(prof_norm, annot=profile.values, fmt=".1f",
             cmap="YlOrRd", linewidths=0.4)
-plt.title(f"Perfil K-Means (k={best_k}) — valores originales anotados")
+plt.title(f"Perfil K-Means (k={best_k}) — original feature means", fontsize=11)
 plt.tight_layout()
 savefig("profile_heatmap.png")
 
 # =============================================================================
-# RESUMEN FINAL
+# FINAL OUTPUT
 # =============================================================================
 print(f"\n{'='*60}")
 print(f"  DONE — Challenge 5 Grupo 6")
