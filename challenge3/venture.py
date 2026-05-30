@@ -220,11 +220,11 @@ def setup_tensorboard(seed: int):
         log_dir = os.path.join(base_dir, f"venture_ppo_seed_{seed}")
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir)
-        print(f"📊 TensorBoard: {log_dir}")
+        print(f" TensorBoard: {log_dir}")
         print(f"   tensorboard --logdir=logs/tensorboard")
         return writer
     except Exception as e:
-        print(f"⚠️ TensorBoard no disponible: {e}")
+        print(f" TensorBoard no disponible: {e}")
         return None
 
 # ================== ENTRENAMIENTO ==================
@@ -277,7 +277,7 @@ def train_ppo(
     
     if verbose:
         print(f"\n{'='*60}")
-        print(f"🚀 Entrenando PPO en {env_id}")
+        print(f" Entrenando PPO en {env_id}")
         print(f"{'='*60}")
         print(f"   Semilla:        {seed}")
         print(f"   Pasos totales:  {total_steps:,}")
@@ -464,7 +464,7 @@ def train_ppo(
         
         # Mostrar losses en consola
         if episode_count % 20 == 0 and episode_count > 0 and verbose:
-            print(f"\n📊 Ep {episode_count}: Policy Loss = {np.mean(epoch_policy_losses):.6f} (debe ser positivo)")
+            print(f"\n Ep {episode_count}: Policy Loss = {np.mean(epoch_policy_losses):.6f} (debe ser positivo)")
         
         scheduler.step()
         
@@ -513,7 +513,7 @@ def train_ppo(
     np.save(model_dir / "policy_losses.npy", policy_losses)
     
     if verbose:
-        print(f"\n✅ Entrenamiento completado en {elapsed/60:.1f} minutos")
+        print(f"\n Entrenamiento completado en {elapsed/60:.1f} minutos")
         print(f"   Mejor return: {best_return:.1f}")
         print(f"   Return final: {metrics['final_avg_return']:.1f}")
         print(f"   Policy loss final: {np.mean(policy_losses[-100:]):.6f} (positivo ✓)")
@@ -526,7 +526,7 @@ def watch_agent(model_path: str, n_episodes: int = 3, seed: int = 42):
     """Ver al agente jugar en tiempo real"""
     
     if not Path(model_path).exists():
-        print(f"❌ Modelo no encontrado: {model_path}")
+        print(f" Modelo no encontrado: {model_path}")
         return
     
     checkpoint = torch.load(model_path, map_location='cpu')
@@ -547,7 +547,7 @@ def watch_agent(model_path: str, n_episodes: int = 3, seed: int = 42):
     model = model.to(device)
     model.eval()
     
-    print(f"\n🎮 Viendo al agente jugar")
+    print(f"\n Viendo al agente jugar")
     print(f"   Modelo: {model_path}")
     print(f"   Episodios: {n_episodes}")
     input("\n🔴 Presiona ENTER para comenzar...\n")
@@ -577,10 +577,10 @@ def watch_agent(model_path: str, n_episodes: int = 3, seed: int = 42):
                 step += 1
                 time.sleep(0.02)
         
-        print(f"📊 Episodio {ep + 1}: {episode_return:.0f} puntos, {episode_dungeons} mazmorras\n")
+        print(f"Episodio {ep + 1}: {episode_return:.0f} puntos, {episode_dungeons} mazmorras\n")
     
     env.close()
-    print("✅ Demostración finalizada")
+    print(" Demostración finalizada")
 
 # ================== MAIN ==================
 if __name__ == "__main__":

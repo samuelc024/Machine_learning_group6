@@ -1,0 +1,12 @@
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+dataset/
+*.csv
+.DS_Store
+Thumbs.db
+src/challenge6.egg-info/
