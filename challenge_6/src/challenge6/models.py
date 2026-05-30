@@ -128,7 +128,7 @@ def _fit_autoencoder(model, data_tensor, epochs: int, batch_size: int, learning_
             optimizer.step()
 
 
-def score_autoencoder(features: np.ndarray, config: ModelConfig, *, random_state: int) -> AutoencoderScores:
+def score_autoencoder(features: np.ndarray, config: ModelConfig, *, random_state: int, save_path: str | None = None) -> AutoencoderScores:
     _ensure_torch()
     torch.manual_seed(random_state)
     matrix, data_tensor = _prepare_tensor_data(features)
@@ -146,6 +146,13 @@ def score_autoencoder(features: np.ndarray, config: ModelConfig, *, random_state
         batch_size=config.batch_size,
         learning_rate=config.learning_rate,
     )
+    # Guardado opcional del modelo entrenado
+    if save_path is not None:
+        try:
+            torch.save(model.state_dict(), save_path)
+        except Exception:
+            # No fallar el pipeline por un error de IO en el guardado
+            print(f"[WARN] No se pudo guardar el Autoencoder en {save_path}")
 
     model.eval()
     with torch.no_grad():
@@ -160,6 +167,7 @@ def score_variational_autoencoder(
     config: ModelConfig,
     *,
     random_state: int,
+    save_path: str | None = None,
 ) -> VariationalAutoencoderScores:
     _ensure_torch()
     torch.manual_seed(random_state)
@@ -186,6 +194,13 @@ def score_variational_autoencoder(
             loss = torch.mean(reconstruction + config.vae_beta * kl)
             loss.backward()
             optimizer.step()
+
+    # Guardado opcional del modelo VAE
+    if save_path is not None:
+        try:
+            torch.save(model.state_dict(), save_path)
+        except Exception:
+            print(f"[WARN] No se pudo guardar el VAE en {save_path}")
 
     model.eval()
     with torch.no_grad():

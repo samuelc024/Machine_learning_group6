@@ -10,6 +10,8 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
+import os
+from datetime import datetime
 
 from .config import ExperimentConfig
 from .data import build_dataset_loader
@@ -72,19 +74,33 @@ def run_experiment(config: ExperimentConfig) -> ExperimentResult:
     
     # 3. Evaluación Profunda: Standard Autoencoder (AE)
     print(f"[INFO] Entrenando Autoencoder Estándar (Latent Dim: {config.model.ae_latent_dim})...")
+    ae_save_path = None
+    if getattr(config, "save_models", False) and getattr(config, "output_dir", None):
+        os.makedirs(config.output_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ae_save_path = os.path.join(config.output_dir, f"ae_latent{config.model.ae_latent_dim}_{ts}.pt")
+
     ae_scores = score_autoencoder(
         feature_matrix,
         config.model,
         random_state=config.dataset.random_state,
+        save_path=ae_save_path,
     )
     ae_reconstruction = ae_scores.reconstruction_mse
     
     # 4. Evaluación Probabilística: Variational Autoencoder (VAE)
     print(f"[INFO] Entrenando Autoencoder Variacional (Latent Dim: {config.model.ae_latent_dim})...")
+    vae_save_path = None
+    if getattr(config, "save_models", False) and getattr(config, "output_dir", None):
+        os.makedirs(config.output_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        vae_save_path = os.path.join(config.output_dir, f"vae_latent{config.model.ae_latent_dim}_{ts}.pt")
+
     vae_output = score_variational_autoencoder(
         feature_matrix,
         config.model,
         random_state=config.dataset.random_state,
+        save_path=vae_save_path,
     )
     vae_scores = vae_output.elbo_loss
 

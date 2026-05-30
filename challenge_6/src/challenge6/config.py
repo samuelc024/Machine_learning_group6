@@ -35,3 +35,8 @@ class ExperimentConfig:
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
     preprocessing: PreprocessingConfig = field(default_factory=PreprocessingConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
+    # Directorio donde guardar artefactos de experimentos (modelos, métricas).
+    # Si es None, no se guardarán modelos automáticamente.
+    output_dir: str | None = "runs/modelo_final"
+    # Controla si se deben guardar los modelos entrenados (.pt).
+    save_models: bool = False

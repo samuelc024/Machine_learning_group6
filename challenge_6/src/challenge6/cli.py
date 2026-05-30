@@ -34,6 +34,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vae-beta", type=float, default=1.0)
 
     parser.add_argument("--output-dir", default="runs")
+    parser.add_argument("--save-models", action="store_true", help="Guardar modelos PyTorch entrenados en output-dir")
     parser.add_argument("--compare-variants", action="store_true")
     parser.add_argument("--analyze-results", type=str, help="Ruta al archivo JSON para realizar el post-análisis")
     return parser
@@ -59,7 +60,7 @@ def _build_config(args: argparse.Namespace) -> ExperimentConfig:
         learning_rate=args.learning_rate,
         vae_beta=args.vae_beta,
     )
-    return ExperimentConfig(dataset=dataset, preprocessing=preprocessing, model=model)
+    return ExperimentConfig(dataset=dataset, preprocessing=preprocessing, model=model, output_dir=args.output_dir, save_models=args.save_models)
 
 
 def _timestamp() -> str:
